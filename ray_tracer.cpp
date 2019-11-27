@@ -2,7 +2,7 @@
 #include <fstream>
 #include <cmath>
 
-float kEpsilon = 1e-8;
+float kEpsilon = 0.00000001;
 
 class Vec3
 {
@@ -76,80 +76,19 @@ class Triangle
             v0 = Vec3(p[0].x, p[0].y, p[0].z);
             v1 = Vec3(p[1].x, p[1].y, p[1].z);
             v2 = Vec3(p[2].x, p[2].y, p[2].z);
-            //std::copy(&sc, &sc+3, &surfaceColour);
         }
 
         bool intersect(const Vec3 &orig, const Vec3 &dir,
     float &t, float &u, float &v)
         {
-            // compute plane's normal
-            Vec3 v0v1 = v1 - v0;
-            Vec3 v0v2 = v2 - v0;
-            // no need to normalize
-            Vec3 N = v0v1.crossProduct(v0v2); // N
-            float denom = N.dotProduct(N);
-            
-            // Step 1: finding P
-            
-            // check if ray and plane are parallel ?
-            float NdotRayDirection = N.dotProduct(dir);
-            if (fabs(NdotRayDirection) < kEpsilon) // almost 0
-            {
-                std::cout << "Parallel " << std::endl;
-                return false; // they are parallel so they don't intersect ! 
-            }
-            // compute d parameter using equation 2
-            float d = N.dotProduct(v0);
-            
-            // compute t (equation 3)
-            t = (N.dotProduct(orig) + d) / NdotRayDirection;
-            // check if the triangle is in behind the ray
-            if (t < 0)
-            {
-                std::cout << "Triangle behind " << std::endl;
-                return false; // the triangle is behind
-            } 
-        
-            // compute the intersection point using equation 1
-            Vec3 P = orig + (t * dir);
-        
-            // Step 2: inside-outside test
-            Vec3 C; // vector perpendicular to triangle's plane
-        
-            // edge 0
-            Vec3 edge0 = v1 - v0; 
-            Vec3 vp0 = P - v0;
-            C = edge0.crossProduct(vp0);
-            if (N.dotProduct(C) < 0)
-            {
-                std::cout << "P is on the right side: edge 0" << std::endl;
-                return false; // P is on the right side
-            } 
-        
-            // edge 1
-            Vec3 edge1 = v2 - v1; 
-            Vec3 vp1 = P - v1;
-            C = edge1.crossProduct(vp1);
-            if ((u = N.dotProduct(C)) < 0)  
-            {
-                std::cout << "P is on the right side: edge 1" << std::endl;
-                return false; // P is on the right side
-            } 
-        
-            // edge 2
-            Vec3 edge2 = v0 - v2; 
-            Vec3 vp2 = P - v2;
-            C = edge2.crossProduct(vp2);
-            if ((v = N.dotProduct(C)) < 0) 
-            {
-                std::cout << "P is on the right side: edge 2" << std::endl;
-                return false; // P is on the right side
-            } 
+            //compute plane's normal
+            Vec3 uv = v1 - v0;
+            Vec3 vv = v2 - v0;
 
-            u /= denom;
-            v /= denom;
+            uv.normalize();
 
-            return true; // this ray hits the triangle
+            Vec3 n = uv.crossProduct(vv);
+            Vec3 w = n.crossProduct(uv);
 
         }
 };
@@ -157,16 +96,16 @@ class Triangle
 int main() 
 {
     int width = 128, height = 128;
-    float eye[3] = {0, 0, 0};
-    float rayOriginal[3] = {0, 0, 1};
-    float rayDirection[3] = {0, 1, 0};
-    float fov = 45; //90?
+ 
+    float fov = 90; //90?
     float imageAspectRatio = (float)width / (float)height;
     float scale = tan((fov * 0.5) * (M_PI/180));
     Vec3 vertices[3] = {Vec3(61, 10, 1), Vec3(100, 100, 1), Vec3(25, 90, 1)};
     Vec3 colours[3] = {Vec3(255, 0, 0), Vec3(0, 255, 0), Vec3(0, 0, 255)};
     Triangle tri = Triangle(vertices, colours);
-    Vec3 orig(0, 0, 0);
+    Vec3 eye(0, 0, 0);
+    Vec3 lookDirection(0, 0, 1);
+    Vec3 upVector(0, 1, 0);
 
     std::ofstream file("output.ppm");
 
@@ -188,23 +127,11 @@ int main()
             store in image[i,j]
 
             */
-           // compute primary ray
-            float x = (2 * (i + 0.5) / (float)width - 1) * imageAspectRatio * scale;
-            float y = (1 - 2 * (j + 0.5) / (float)height) * scale;
-            Vec3 dir(x, y, -1);
-            std::cout << dir.x << dir.y << dir.z << std::endl;
-            dir.normalize();
-            std::cout << dir.x << dir.y << dir.z << std::endl;
             float t, u, v;
 
-            if (tri.intersect(orig, dir, t, u, v)) {
-                // [comment]
-                // Interpolate colors using the barycentric coordinates
-                // [/comment]
+            if (tri.intersect(eye, lookDirection, t, u, v)) 
+            {
                 file << 0 << " " << 0 << " " << 0 << " ";
-                //u * cols[0] + v * cols[1] + (1 - u - v) * cols[2];
-                // uncomment this line if you want to visualize the row barycentric coordinates
-                //*pix = Vec3f(u, v, 1 - u - v);
             } 
             else 
             {
