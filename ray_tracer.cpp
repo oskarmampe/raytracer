@@ -77,7 +77,7 @@ public:
     }
 
     bool intersect(const Vec3 &orig, const Vec3 &dir,
-                   float &t, float &u, float &v)
+                   float &t, float &u, float &v, const Vec3 &zxc)
     {
   // compute plane's normal
     Vec3 v0v1 = v1 - v0;
@@ -103,6 +103,12 @@ public:
  
     // compute the intersection point using equation 1
     Vec3 P = orig + t * dir;
+
+    if (zxc.x == 61 && zxc.y == 10)
+    {
+        std::cout << "P Vector: " << P.x << "< " << P.y << ", " << P.z << std::endl; 
+    }
+    
  
     // Step 2: inside-outside test
     Vec3 C; // vector perpendicular to triangle's plane
@@ -135,11 +141,13 @@ public:
 int main()
 {
     int width = 128, height = 128;
-
-    float fov = 45; 
-    float scale = 2.0f * tan((fov * 0.5)*M_PI/180);
+    double invWidth = 1.0/128.0, invHeight = 1.0/128.0;
+    double fov = 90.0; 
+    double scale = tan((fov * 0.5)*M_PI/180.0f);
+    double aspect = width/height;
 
     Vec3 vertices[3] = {Vec3(-0.04688, -0.84375, 1), Vec3(0.5625, 0.5625, 1), Vec3(-0.60938, 0.40625, 1)};
+    //Vec3 vertices[3] = {Vec3(61, 10, 1), Vec3(100, 100, 1), Vec3(25, 90, 1)};
     Vec3 c[3] = {Vec3(255, 0, 0), Vec3(0, 255, 0), Vec3(0, 0, 255)};
     Triangle tri = Triangle(vertices, c);
     Vec3 eye(0, 0, 0);
@@ -153,10 +161,30 @@ int main()
     file << "128 128" << '\n';
     file << "255" << '\n';
 
+    std::cout << "scale: " << scale << std::endl;
+    std::cout << "aspect: " << aspect << std::endl;
+    double topEdge = lookDirection.z * scale;
+	double leftEdge = -topEdge * aspect;
+
+    std::cout << "topEdge: " << topEdge << std::endl;
+    std::cout << "leftEdge: " << leftEdge << std::endl;
+
+
+	double step_x = 2.0*(-leftEdge) / static_cast<float>(width);
+	double step_y = 2.0*topEdge / static_cast<double>(height);
+
+    std::cout << "invHeight: " << invHeight << std::endl;
+    std::cout << "invWidth: " << invWidth << std::endl;
+
+
+
     for (int j = 0; j < height; ++j)
     {
         for (int i = 0; i < width; ++i)
         {
+
+            //double x = leftEdge + step_x / 2.0 + static_cast<int>(i) * step_x;
+			//double y = topEdge - step_y / 2.0 - static_cast<int>(j) * step_y;
             /*
             for each pixel p_ij = (i,j)
             let R_ij be the ray from E through p_ij
@@ -165,13 +193,35 @@ int main()
             compute lighting at point P
             store in image[i,j]
             */
-            float x = (2 * (i + 0.5) / (float)width - 1)  * scale; 
-            float y = (1 - 2 * (j + 0.5) / (float)height) * scale; 
+            float x = (2 * ((i + 0.5) * invWidth) - 1); 
+            float y = (1 - 2 * ((j + 0.5) * invHeight)); 
             Vec3 dir(x, y, lookDirection.z); 
             dir.normalize(); 
             float t, u, v;
 
-            if (tri.intersect(eye, dir, t, u, v))
+            if (i == 61 && j == 10)
+            {
+                std::cout << "61, 10: " << std::endl;
+                std::cout << x << ", " << y << std::endl;
+                std::cout << dir.x << ", " << dir.y << std::endl;
+            }
+
+            if (i == 100 && j == 100)
+            {
+                std::cout << "100, 100: " << std::endl;
+                std::cout << x << ", " << y << std::endl;
+                std::cout << dir.x << ", " << dir.y << std::endl;
+            }
+
+            if (i == 25 && j == 90)
+            {
+                std::cout << "25, 90: " << std::endl;
+                std::cout << x << ", " << y << std::endl;
+                std::cout << dir.x << ", " << dir.y << std::endl;
+            }
+            
+            Vec3 orig(i, j, 1);
+            if (tri.intersect(eye, dir, t, u, v, orig))
             {
                 //file << 0 << " " << 0 << " " << 0 << " ";
                 double alpha = u;
