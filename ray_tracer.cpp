@@ -1,235 +1,109 @@
-#include <iostream>
-#include <fstream>
-#include <cmath>
+#include "raytracer_io.h"
+#include "geometry.h"
 
-float kEpsilon = 0.00000001;
+/**
+ * 
+ * Simple implementation of a ray tracer.
+ *  
+*/
 
-class Vec3
+// Image initialization
+int width = 128, height = 128;
+double invWidth = 1.0/128.0, invHeight = 1.0/128.0;
+double fov = 90.0; 
+double scale = tan((fov * 0.5)*M_PI/180.0f);
+double aspect = width/height;
+
+Vec3 eye(0, 0, 0);
+Vec3 lookDirection(0, 0, 1);
+Vec3 upVector(0, 1, 0);
+
+// Light initialization
+//POSITION, COLOUR
+LightStruct light = {Vec3(0,0.1,0), Vec3(1,1,1)};
+
+// Shader initialization
+PhongShader shader;
+
+// Triangle initialization
+Vec3 vertices[3] = {Vec3(-0.04688, -0.84375, 1), Vec3(0.5625, 0.5625, 1), Vec3(-0.60938, 0.40625, 1)};
+//Vec3 vertices[3] = {Vec3(61, 10, 1), Vec3(100, 100, 1), Vec3(25, 90, 1)};
+Vec3 c[3] = {Vec3(255, 0, 0), Vec3(0, 255, 0), Vec3(0, 0, 255)};
+//Vec3 ambient(1.0f, 0.5f, 0.31f), diffuse(1.0f, 0.5f, 0.31f), specular(0.5f, 0.5f, 0.5f);
+double ambient = 0.1f, diffuse = 0.5f, specular = 0.4f; 
+double specular_coeff = 16.0f;
+Triangle tri = Triangle(vertices, c, ambient, diffuse, specular, specular_coeff);
+
+/*
+for each pixel p with coords (i,j)
+let R_ij be the ray from eye through p
+cast ray R into scene
+find point P where R first intersects the plane
+use half-plane test to check whether P is inside the triangle
+calculate colour and store in image
+*/
+void partA()
 {
-public:
-    float x, y, z;
+    std::ofstream file("intersections.ppm");
+    write_ppm_header(&file);
 
-    Vec3(const float x0 = 0, const float y0 = 0, const float z0 = 0) : x(x0), y(y0), z(z0) {}
-
-    Vec3 operator-(const Vec3 &v) const
+    // Loop through each pixel 
+    for (int j = 0; j < height; ++j)
     {
-        return Vec3(x - v.x, y - v.y, z - v.z);
-    }
-
-    Vec3 operator+(const Vec3 &v) const
-    {
-        return Vec3(x + v.x, y + v.y, z + v.z);
-    }
-
-    Vec3 operator*(const float &r)
-    {
-        return Vec3(x * r, y * r, z * r);
-    }
-
-    Vec3 operator*(const Vec3 &v) const
-    {
-        return Vec3(x * v.x, y * v.y, z * v.z);
-    }
-
-    Vec3 &operator*=(const float &r)
-    {
-        x *= r, y *= r, z *= r;
-        return *this;
-    }
-
-    friend Vec3 operator*(const float &r, const Vec3 &v)
-    {
-        return Vec3(v.x * r, v.y * r, v.z * r);
-    }
-
-    void normalize()
-    {
-        float dist = x * x + y * y + z * z;
-        if (dist > 0)
+        for (int i = 0; i < width; ++i)
         {
-            float factor = 1 / sqrt(dist);
-            x *= factor, y *= factor, z *= factor;
+            // The ray has to go through the middle of the pixel, so an offset is needed
+            float x = (2 * ((i + 0.5) * invWidth) - 1); 
+            float y = (1 - 2 * ((j + 0.5) * invHeight)); 
+
+            // Create a direction vector i.e. direction of ray.
+            Vec3 dir(x, y, lookDirection.z); 
+            dir.normalize(); 
+            float t, alpha, beta, gamma;// Needed later for barycentric interpolation
+            Vec3 fragment(0, 0, 0); // Needed later for shading
+            Vec3 normal(0, 0, 0); // Needed later for shading
+            if (tri.intersect(eye, dir, t, alpha, beta, gamma, normal, fragment))
+            {
+                file << 0 << " " << 0 << " " << 0 << " ";
+            }
+            else
+            {
+                file << 255 << " " << 255 << " " << 192 << " ";
+            }
         }
     }
+    file.close(); 
+}
 
-    float dotProduct(const Vec3 &v) const
-    {
-        return x * v.x + y * v.y + z * v.z;
-    }
-
-    Vec3 crossProduct(const Vec3 &v) const
-    {
-        return Vec3(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x);
-    }
-};
-
-class Triangle
+/**
+ * 
+ * Same as A with minor change to colour.
+ * 
+*/
+void partB()
 {
-public:
-    Vec3 v0, v1, v2, surfaceColour[3];
-    float transparency, reflection;
-
-    Triangle(const Vec3 p[3], const Vec3 sc[3], const float &refl = 0, const float &transp = 0) : reflection(refl), transparency(transp)
-    {
-        v0 = Vec3(p[0].x, p[0].y, p[0].z);
-        v1 = Vec3(p[1].x, p[1].y, p[1].z);
-        v2 = Vec3(p[2].x, p[2].y, p[2].z);
-    }
-
-    bool intersect(const Vec3 &orig, const Vec3 &dir,
-                   float &t, float &u, float &v, const Vec3 &zxc)
-    {
-  // compute plane's normal
-    Vec3 v0v1 = v1 - v0;
-    Vec3 v0v2 = v2 - v0;
-    // no need to normalize
-    Vec3 N = v0v1.crossProduct(v0v2); // N
-    float denom = N.dotProduct(N);
-    
-    // Step 1: finding P
-    
-    // check if ray and plane are parallel ?
-    float NdotRayDirection = N.dotProduct(dir);
-    if (fabs(NdotRayDirection) < kEpsilon) // almost 0
-        return false; // they are parallel so they don't intersect ! 
-
-    // compute d parameter using equation 2
-    float d = N.dotProduct(v0);
-    
-    // compute t (equation 3)
-    t = (N.dotProduct(orig) + d) / NdotRayDirection;
-    // check if the triangle is in behind the ray
-    if (t < 0) return false; // the triangle is behind
- 
-    // compute the intersection point using equation 1
-    Vec3 P = orig + t * dir;
-
-    if (zxc.x == 61 && zxc.y == 10)
-    {
-        std::cout << "P Vector: " << P.x << "< " << P.y << ", " << P.z << std::endl; 
-    }
-    
- 
-    // Step 2: inside-outside test
-    Vec3 C; // vector perpendicular to triangle's plane
- 
-    // edge 0
-    Vec3 edge0 = v1 - v0; 
-    Vec3 vp0 = P - v0;
-    C = edge0.crossProduct(vp0);
-    if (N.dotProduct(C) < 0) return false; // P is on the right side
- 
-    // edge 1
-    Vec3 edge1 = v2 - v1; 
-    Vec3 vp1 = P - v1;
-    C = edge1.crossProduct(vp1);
-    if ((u = N.dotProduct(C)) < 0)  return false; // P is on the right side
- 
-    // edge 2
-    Vec3 edge2 = v0 - v2; 
-    Vec3 vp2 = P - v2;
-    C = edge2.crossProduct(vp2);
-    if ((v = N.dotProduct(C)) < 0) return false; // P is on the right side;
-
-    u /= denom;
-    v /= denom;
-
-    return true; // this ray hits the triangle
-    }
-};
-
-int main()
-{
-    int width = 128, height = 128;
-    double invWidth = 1.0/128.0, invHeight = 1.0/128.0;
-    double fov = 90.0; 
-    double scale = tan((fov * 0.5)*M_PI/180.0f);
-    double aspect = width/height;
-
-    Vec3 vertices[3] = {Vec3(-0.04688, -0.84375, 1), Vec3(0.5625, 0.5625, 1), Vec3(-0.60938, 0.40625, 1)};
-    //Vec3 vertices[3] = {Vec3(61, 10, 1), Vec3(100, 100, 1), Vec3(25, 90, 1)};
-    Vec3 c[3] = {Vec3(255, 0, 0), Vec3(0, 255, 0), Vec3(0, 0, 255)};
-    Triangle tri = Triangle(vertices, c);
-    Vec3 eye(0, 0, 0);
-    Vec3 lookDirection(0, 0, 1);
-    Vec3 upVector(0, 1, 0);
-
-    std::ofstream file("output.ppm");
-
-    file << "P3" << '\n';
-    file << "#Oskar Mampe" << '\n';
-    file << "128 128" << '\n';
-    file << "255" << '\n';
-
-    std::cout << "scale: " << scale << std::endl;
-    std::cout << "aspect: " << aspect << std::endl;
-    double topEdge = lookDirection.z * scale;
-	double leftEdge = -topEdge * aspect;
-
-    std::cout << "topEdge: " << topEdge << std::endl;
-    std::cout << "leftEdge: " << leftEdge << std::endl;
-
-
-	double step_x = 2.0*(-leftEdge) / static_cast<float>(width);
-	double step_y = 2.0*topEdge / static_cast<double>(height);
-
-    std::cout << "invHeight: " << invHeight << std::endl;
-    std::cout << "invWidth: " << invWidth << std::endl;
-
-
+    std::ofstream file("barycentric.ppm");
+    write_ppm_header(&file);
 
     for (int j = 0; j < height; ++j)
     {
         for (int i = 0; i < width; ++i)
         {
-
-            //double x = leftEdge + step_x / 2.0 + static_cast<int>(i) * step_x;
-			//double y = topEdge - step_y / 2.0 - static_cast<int>(j) * step_y;
-            /*
-            for each pixel p_ij = (i,j)
-            let R_ij be the ray from E through p_ij
-            cast ray R into scene
-            find point P where R first intersects an object
-            compute lighting at point P
-            store in image[i,j]
-            */
             float x = (2 * ((i + 0.5) * invWidth) - 1); 
             float y = (1 - 2 * ((j + 0.5) * invHeight)); 
             Vec3 dir(x, y, lookDirection.z); 
             dir.normalize(); 
-            float t, u, v;
-
-            if (i == 61 && j == 10)
-            {
-                std::cout << "61, 10: " << std::endl;
-                std::cout << x << ", " << y << std::endl;
-                std::cout << dir.x << ", " << dir.y << std::endl;
-            }
-
-            if (i == 100 && j == 100)
-            {
-                std::cout << "100, 100: " << std::endl;
-                std::cout << x << ", " << y << std::endl;
-                std::cout << dir.x << ", " << dir.y << std::endl;
-            }
-
-            if (i == 25 && j == 90)
-            {
-                std::cout << "25, 90: " << std::endl;
-                std::cout << x << ", " << y << std::endl;
-                std::cout << dir.x << ", " << dir.y << std::endl;
-            }
+            float t, alpha, beta, gamma;
             
-            Vec3 orig(i, j, 1);
-            if (tri.intersect(eye, dir, t, u, v, orig))
+            Vec3 fragment(0, 0, 0);
+            Vec3 normal(0, 0, 0);
+            if (tri.intersect(eye, dir, t, alpha, beta, gamma, normal, fragment))
             {
-                //file << 0 << " " << 0 << " " << 0 << " ";
-                double alpha = u;
-                double beta = v;
-                double gamma = (1 - u - v);
+                // Calculate barycentric interpolation as in assignment 3 
                 double r = alpha * c[0].x + beta * c[1].x + gamma * c[2].x;
                 double g = alpha * c[0].y + beta * c[1].y + gamma * c[2].y;
                 double b = alpha * c[0].z + beta * c[1].z + gamma * c[2].z;
+                
                 file << (int)r << " " << (int)g << " " << (int)b << " "; 
             }
             else
@@ -238,14 +112,181 @@ int main()
             }
         }
     }
-    /*
-    for each pixel p_ij = (i,j)
-	let R_ij be the ray from E through p_ij
-	cast ray R into scene
-	find point P where R first intersects an object
-	compute lighting at point P
-	store in image[i,j]     
-    */
     file.close();
+}
+
+/**
+ * 
+ * Calculate ambient light, simmilar logic to part A/B but calculates ambient only.
+ * 
+*/ 
+void partCAmbient()
+{
+    std::ofstream file("ambient.ppm");
+    write_ppm_header(&file);
+
+    for (int j = 0; j < height; ++j)
+    {
+        for (int i = 0; i < width; ++i)
+        {
+            float x = (2 * ((i + 0.5) * invWidth) - 1); 
+            float y = (1 - 2 * ((j + 0.5) * invHeight)); 
+            Vec3 dir(x, y, lookDirection.z); 
+            dir.normalize(); 
+            float t, alpha, beta, gamma;
+            Vec3 fragment(0, 0, 0);
+            Vec3 normal(0, 0, 0);
+            if (tri.intersect(eye, dir, t, alpha, beta, gamma, normal, fragment))
+            {
+                //Set colour to green for easier debug
+                Vec3 colour(0, 255, 0);
+ 
+                Vec3 amb = shader.ambient(light, tri.ambient);
+                Vec3 finalColour(amb.x * colour.x, amb.y * colour.y, amb.z * colour.z);
+
+                file << (int)finalColour.x << " " << (int)finalColour.y << " " << (int)finalColour.z << " "; 
+            }
+            else
+            {
+                file << 255 << " " << 255 << " " << 192 << " ";
+            }
+        }
+    }
+    file.close();
+}
+
+/**
+ * 
+ * Calculate diffuse light, simmilar logic to part A/B but calculates diffuse only.
+ * 
+*/ 
+void partCDiffuse()
+{
+    std::ofstream file("diffuse.ppm");
+    write_ppm_header(&file);
+
+    for (int j = 0; j < height; ++j)
+    {
+        for (int i = 0; i < width; ++i)
+        {
+            float x = (2 * ((i + 0.5) * invWidth) - 1); 
+            float y = (1 - 2 * ((j + 0.5) * invHeight)); 
+            Vec3 dir(x, y, lookDirection.z); 
+            dir.normalize(); 
+            float t, alpha, beta, gamma;
+            
+            Vec3 fragment(0, 0, 0);
+            Vec3 normal(0, 0, 0);
+            if (tri.intersect(eye, dir, t, alpha, beta, gamma, normal, fragment))
+            {
+                Vec3 colour(0, 255, 0);
+
+                Vec3 diffuseColour = shader.diffuse(light, fragment, normal, tri.diffuse);
+                Vec3 finalColour(colour.x * diffuseColour.x , colour.y * diffuseColour.y, colour.z * diffuseColour.z);
+
+                file << (int)finalColour.x << " " << (int)finalColour.y << " " << (int)finalColour.z << " "; 
+            }
+            else
+            {
+                file << 255 << " " << 255 << " " << 192 << " ";
+            }
+        }
+    }
+    file.close();
+}
+
+/**
+ * 
+ * Calculate specular light, simmilar logic to part A/B but calculates specular only.
+ * 
+*/ 
+void partCSpecular()
+{
+    std::ofstream file("specular.ppm");
+    write_ppm_header(&file);
+
+    for (int j = 0; j < height; ++j)
+    {
+        for (int i = 0; i < width; ++i)
+        {
+            float x = (2 * ((i + 0.5) * invWidth) - 1); 
+            float y = (1 - 2 * ((j + 0.5) * invHeight)); 
+            Vec3 dir(x, y, lookDirection.z); 
+            dir.normalize(); 
+            float t, alpha, beta, gamma;
+            double diff = 0.0;
+            
+            
+            Vec3 fragment(0, 0, 0);
+            Vec3 normal(0, 0, 0);
+            if (tri.intersect(eye, dir, t, alpha, beta, gamma, normal, fragment))
+            {
+                
+                Vec3 colour(0, 255, 0);
+
+                Vec3 specularColour = shader.specular(light, fragment, eye, normal, tri.specular, tri.specular_coeff);
+                Vec3 finalColour(specularColour.x*255, specularColour.y*255, specularColour.z*255);
+
+                file << (int)finalColour.x << " " << (int)finalColour.y << " " << (int)finalColour.z << " "; 
+            }
+            else
+            {
+                file << 255 << " " << 255 << " " << 192 << " ";
+            }
+        }
+    }
+    file.close();
+}
+
+/**
+ * 
+ * Calculate blinn-phong lightning, simmilar logic to part A/B but has complete lightning.
+ * 
+*/ 
+void partCPhong()
+{
+    std::ofstream file("phong.ppm");
+    write_ppm_header(&file);
+
+    for (int j = 0; j < height; ++j)
+    {
+        for (int i = 0; i < width; ++i)
+        {
+            float x = (2 * ((i + 0.5) * invWidth) - 1); 
+            float y = (1 - 2 * ((j + 0.5) * invHeight)); 
+            Vec3 dir(x, y, lookDirection.z); 
+            dir.normalize(); 
+            float t, alpha, beta, gamma;
+            
+            Vec3 fragment(0, 0, 0);
+            Vec3 normal(0, 0, 0);
+            if (tri.intersect(eye, dir, t, alpha, beta, gamma, normal, fragment))
+            {
+
+                Vec3 colour(0, 1, 0);
+
+                Vec3 shaderColour = shader.calculatePhong(light, fragment, lookDirection, normal, tri.ambient, tri.diffuse, tri.specular, tri.specular_coeff);
+
+                Vec3 finalColour(colour.x * shaderColour.x, colour.y * shaderColour.y, colour.z * shaderColour.z);
+
+                file << (int)(finalColour.x*255) << " " << (int)(finalColour.y*255) << " " << (int)(finalColour.z*255) << " "; 
+            }
+            else
+            {
+                file << 255 << " " << 255 << " " << 192 << " ";
+            }
+        }
+    }
+    file.close();
+}
+
+int main()
+{
+    partA();
+    partB();
+    partCAmbient();
+    partCDiffuse();
+    partCSpecular();
+    partCPhong();
     return 0;
 }
