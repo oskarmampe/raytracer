@@ -21,12 +21,20 @@ struct LightStruct
 class Triangle
 {
 public:
-    Vec3 v0, v1, v2, surfaceColour[3];
+    Vec3 v0, v1, v2;
     double ambient, diffuse, specular;
     double specular_coeff;
 
+
+    // Constructer for a simple triangle with vertices.
+    Triangle(const Vec3 p[3])
+    {
+        v0 = Vec3(p[0].x, p[0].y, p[0].z);
+        v1 = Vec3(p[1].x, p[1].y, p[1].z);
+        v2 = Vec3(p[2].x, p[2].y, p[2].z);
+    }
     // Constructer for a triangle, including material properties, vertices, and surface colour.
-    Triangle(const Vec3 p[3], const Vec3 sc[3], const double amb, const double dif, const double spec, const double coeff) : specular_coeff(coeff), ambient(amb), diffuse(dif), specular(spec)
+    Triangle(const Vec3 p[3], const double amb, const double dif, const double spec, const double coeff) : specular_coeff(coeff), ambient(amb), diffuse(dif), specular(spec)
     {
         v0 = Vec3(p[0].x, p[0].y, p[0].z);
         v1 = Vec3(p[1].x, p[1].y, p[1].z);
@@ -52,7 +60,7 @@ public:
         return false; 
     }
 
-    // compute d parameter using equation 2
+    // Distance from P to E.
     float d = normal.dotProduct(v0);
     
     // Find the intersection point
@@ -65,7 +73,7 @@ public:
     // Therefore, the point has these coordinates
     fragment = eye + t * dir;
  
-    // Test whether the triangle is inside using barycentric coordinates and half-plane test
+    // Test whether the triangle is inside using barycentric coordinates and half-space test
 
     // First edge
     Vec3 edge0 = v1 - v0; 
@@ -126,7 +134,7 @@ class PhongShader
             objectNormal.normalize();// Normalize just in case
 
             // Get the direction of the light
-            Vec3 lightDir = fragmentPos - light.position; 
+            Vec3 lightDir = fragmentPos -light.position; 
             lightDir.normalize();
 
             // Calculate diffuse
@@ -142,7 +150,7 @@ class PhongShader
             objectNormal.normalize();// Normalize just in case
             
             // Get the direction of light
-            Vec3 lightDir = fragmentPos - light.position; 
+            Vec3 lightDir = light.position - fragmentPos; 
             lightDir.normalize();  
 
             // Get the view direction
@@ -150,7 +158,7 @@ class PhongShader
             viewDir.normalize();
 
             // Get the reflect vector
-            Vec3 reflectDir = reflect(Vec3(lightDir.x, lightDir.y, lightDir.z), objectNormal);  
+            Vec3 reflectDir = reflect(Vec3(-lightDir.x, -lightDir.y, -lightDir.z), objectNormal);  
 
             // Calculate specular lightning
             float spec = std::pow(std::max(viewDir.dotProduct(reflectDir), 0.0), specular_coeff);

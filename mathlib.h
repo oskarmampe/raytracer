@@ -1,7 +1,9 @@
 #include <cmath>
 #include <algorithm>
 
-float kEpsilon = 0.00000001;
+// Epsilon to counter floating point accuracy issues
+float kEpsilon = 1e-7;
+
 /**
  * 
  * Simple implementation of a Vector. Only floating point is allowed.

@@ -12,4 +12,11 @@ This will make create a binary file called ray_tracer. Execute the file:
 
 [userid@machine Assignment4RayTracer]$ ./ray_tracer
 
-d)
+For Blinn-Phong I have chosen the following properties:
+
+ambient = 0.2
+diffuse = 0.3
+specular = 0.9
+specular coefficient = 16;
+
+These material properties clearly show the effect of each lightning.
